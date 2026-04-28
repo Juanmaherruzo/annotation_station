@@ -46,6 +46,18 @@ If you already live inside Roboflow and your images can leave your machine, stay
 
 ---
 
+## Screenshots
+
+<div align="center">
+
+| Home — project dashboard | Annotator — SAM segmentation |
+|:---:|:---:|
+| ![Home page](assets/Home_page.png) | ![Annotation example](assets/Annotation_example.png) |
+
+</div>
+
+---
+
 ## Key Features
 
 | Feature | Details |
