@@ -1,6 +1,6 @@
 <div align="center">
 
-# SAMark
+# annotation-station
 
 **Local, privacy-first annotation platform powered by Segment Anything Model 2.1**
 
@@ -18,23 +18,25 @@
 
 > Annotate instance segmentation masks and bounding boxes at inference speed — one click per object, GPU-accelerated, embeddings cached on disk so every subsequent click is instant.
 
+![Demo](assets/demo.gif)
+
 </div>
 
 ---
 
 ## Overview
 
-SAMark brings the assisted-annotation workflow of commercial platforms into your local environment. It uses [SAM 2.1](https://github.com/facebookresearch/sam2) (Meta AI) as its segmentation backbone, wraps it in a FastAPI server with a three-level embedding cache, and exposes a Konva.js canvas frontend for fluid, keyboard-driven annotation.
+annotation-station brings the assisted-annotation workflow of commercial platforms into your local environment. It uses [SAM 2.1](https://github.com/facebookresearch/sam2) (Meta AI) as its segmentation backbone, wraps it in a FastAPI server with a three-level embedding cache, and exposes a Konva.js canvas frontend for fluid, keyboard-driven annotation.
 
 Designed for computer vision practitioners who need to label custom datasets — particularly **multi-instance, multi-class** scenes — without uploading sensitive imagery to third-party services. Initial validation has focused on forestry imagery (tree crown and trunk segmentation in Iberian *dehesa* ecosystems), but the workflow is fully domain-agnostic.
 
 ---
 
-## Why SAMark
+## Why annotation-station
 
-There are excellent annotation tools out there. SAMark is not trying to replace all of them — it occupies a specific niche: **local, SAM-assisted, laptop-GPU-friendly**.
+There are excellent annotation tools out there. annotation-station is not trying to replace all of them — it occupies a specific niche: **no cloud, fully local, zero telemetry**.
 
-| Aspect | SAMark | Roboflow | CVAT | Label Studio |
+| Aspect | annotation-station | Roboflow | CVAT | Label Studio |
 |---|---|---|---|---|
 | Data stays on your machine | Yes | No (cloud) | Yes (self-host) | Yes (self-host) |
 | SAM-assisted clicks out of the box | SAM 2.1 | Yes | Plugin | Plugin |
@@ -42,7 +44,7 @@ There are excellent annotation tools out there. SAMark is not trying to replace 
 | Cost | Free | Freemium | Free | Free |
 | Runs on 4 GB VRAM laptop GPU | Yes (tiny) | N/A | Yes | Yes |
 
-If you already live inside Roboflow and your images can leave your machine, stay there — it is a great product. SAMark exists for the cases where they cannot.
+If you already live inside Roboflow and your images can leave your machine, stay there — it is a great product. annotation-station exists for the cases where they cannot.
 
 ---
 
@@ -143,8 +145,8 @@ The `SAMEngine` abstract base class decouples the annotation pipeline from any s
 
 ```bash
 # 1. Clone
-git clone https://github.com/Juanmaherruzo/samark.git
-cd samark
+git clone https://github.com/Juanmaherruzo/annotation_station.git
+cd annotation_station
 
 # 2. Create the Python environment and install dependencies
 conda create -n sam_studio python=3.11 -y
@@ -242,7 +244,7 @@ The SAM model variant is fixed to **tiny** in `backend/app/config.py` to stay wi
 ## Project Structure
 
 ```
-samark/
+annotation-station/
 ├── backend/
 │   ├── app/
 │   │   ├── api/            # FastAPI routers (projects, classes, images, annotations, inference, export)
@@ -265,6 +267,10 @@ samark/
 │       └── api/            # Axios wrappers
 ├── data/
 │   └── projects/           # Runtime — gitignored
+├── assets/
+│   ├── demo.gif
+│   ├── Home_page.png
+│   └── Annotation_example.png
 ├── INSTALL.md
 ├── start.bat               # One-click launcher (Windows)
 └── Makefile
@@ -289,7 +295,7 @@ Longer-term ideas are openly discussed in issues tagged `discussion`. Proposals 
 
 Contributions, issues, and feature requests are welcome. Please open an issue before submitting a pull request so we can discuss the approach.
 
-This project is in active development and I am genuinely open to any form of feedback — whether that is an architectural suggestion, a workflow improvement, a bug report, or a perspective from practitioners working with different datasets or domain requirements. If you have used SAMark in your own annotation pipeline and encountered friction, I would particularly value hearing about it.
+This project is in active development and I am genuinely open to any form of feedback — whether that is an architectural suggestion, a workflow improvement, a bug report, or a perspective from practitioners working with different datasets or domain requirements. If you have used annotation-station in your own annotation pipeline and encountered friction, I would particularly value hearing about it.
 
 Do not hesitate to open an issue simply to share an idea. Constructive criticism is as welcome as praise.
 
