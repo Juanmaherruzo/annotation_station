@@ -281,8 +281,6 @@ annotation-station/
 ## Roadmap
 
 Short-term priorities tracked in GitHub Issues:
-
-- Polygon editor: smoother handle interactions and undo granularity
 - Automatic suggestion mode: SAM 2 automask for first-pass annotations
 - Text prompts via a SAM 3 backend (once memory profile permits)
 - Linux and macOS launcher scripts (currently Windows only)
