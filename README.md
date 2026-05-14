@@ -310,6 +310,27 @@ npm run dev
 
 ---
 
+Citation
+If you use this work in your research, please cite:
+
+@software{herruzo2026annotation_station,
+  author  = {Herruzo, Juan Manuel},
+  title   = {annotation_station},
+  year    = {2026},
+  url     = {[https://github.com/Juanmaherruzo/annotation_station](https://github.com/Juanmaherruzo/annotation_station)}
+}
+
+---
+
+## Contact
+
+**Juan Manuel Herruzo**  
+juanmherruzo@gmail.com
+
+For commercial licensing, API access or research collaboration, get in touch.
+
+---
+
 ## License
 
 Distributed under the [MIT License](LICENSE).
