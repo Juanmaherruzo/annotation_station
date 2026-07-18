@@ -2,8 +2,10 @@
 data/projects/
 data/*.db
 
-# SAM checkpoints — too large and not yours to redistribute
+# Model weights — too large and not yours to redistribute
 *.pt
+*.pth
+*.onnx
 
 # Python
 __pycache__/
@@ -14,6 +16,11 @@ __pycache__/
 dist/
 build/
 .venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
 
 # Node
 frontend/node_modules/

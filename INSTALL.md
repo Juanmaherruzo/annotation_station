@@ -96,7 +96,7 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_
 ```bat
 conda activate sam_studio
 cd backend
-pip install -r requirements.txt
+pip install -e ".[dev]"
 cd ..
 ```
 

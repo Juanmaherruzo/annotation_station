@@ -138,6 +138,22 @@ The `SAMEngine` abstract base class decouples the annotation pipeline from any s
 
 ---
 
+## Stack
+
+| Tool | Version | Purpose |
+|---|---|---|
+| Python | 3.11 | Backend runtime |
+| FastAPI + uvicorn | ≥ 0.111 / ≥ 0.29 | REST API server |
+| SAM 2.1 (tiny) | — | Segmentation backbone |
+| PyTorch + torchvision | ≥ 2.3 | Model inference (CUDA) |
+| SQLModel | ≥ 0.0.19 | SQLite ORM / persistence |
+| pydantic-settings | ≥ 2.3 | Typed, `.env`-aware config |
+| OpenCV + Shapely | ≥ 4.9 / ≥ 2.0 | Mask → polygon geometry |
+| React 18 + Vite + Konva | — | Annotation canvas frontend |
+| ruff / black / mypy / pytest | — | Lint / format / types / tests |
+
+---
+
 ## Quick Start
 
 > **Prerequisites:** Python 3.11 (conda or venv), Node.js 20+, NVIDIA GPU with ≥ 4 GB VRAM, CUDA 12.x driver.
@@ -153,7 +169,7 @@ conda create -n sam_studio python=3.11 -y
 conda activate sam_studio
 pip install torch==2.11.0+cu128 torchvision==0.26.0+cu128 --index-url https://download.pytorch.org/whl/cu128
 pip install git+https://github.com/facebookresearch/sam2.git
-pip install -r backend/requirements.txt
+pip install -e "backend[dev]"        # installs the app + dev tooling from pyproject.toml
 
 # 3. Install frontend dependencies
 cd frontend && npm install && cd ..
@@ -166,6 +182,16 @@ start.bat        # Windows — opens the browser automatically
 ```
 
 First launch can take a minute while FastAPI imports PyTorch and the frontend compiles. Subsequent launches are near-instant.
+
+**Alternative — install the backend with [uv](https://docs.astral.sh/uv/) (faster):**
+
+```bash
+cd backend
+uv venv && uv pip install -e ".[dev]"
+# torch/torchvision come from the optional [inference] extra:
+uv pip install -e ".[inference]" --index-url https://download.pytorch.org/whl/cu128
+uv pip install git+https://github.com/facebookresearch/sam2.git
+```
 
 ---
 
@@ -258,7 +284,8 @@ annotation-station/
 │   │   ├── schemas/        # Pydantic request/response schemas
 │   │   ├── config.py       # Settings (pydantic-settings, .env aware)
 │   │   └── main.py         # App factory, lifespan, CORS
-│   └── requirements.txt
+│   ├── tests/              # pytest suite (mask utils, exporters, config)
+│   └── pyproject.toml      # Packaging, dependencies, tool config
 ├── frontend/
 │   └── src/
 │       ├── components/     # Canvas, ClassManager, LayersPanel, ImageGallery, ...

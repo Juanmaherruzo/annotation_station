@@ -8,7 +8,7 @@ FRONTEND    = $(shell cygpath -w $(CURDIR)/$(FRONTEND_DIR))
 
 # Run once to install all dependencies
 install:
-	conda run -n $(CONDA_ENV) pip install -r $(BACKEND_DIR)/requirements.txt
+	conda run -n $(CONDA_ENV) pip install -e "$(BACKEND_DIR)[dev]"
 	cd $(FRONTEND_DIR) && npm install
 
 # Start the FastAPI backend (run in its own terminal)
