@@ -2,15 +2,21 @@ import json
 import random
 import shutil
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TypeVar
 
 import yaml
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.db.models import Annotation, Image, ImageStatus, LabelClass, Project
 
+_T = TypeVar("_T")
 
-def _bbox_cxcywh(points: list) -> tuple[float, float, float, float]:
+
+def _bbox_cxcywh(
+    points: Sequence[Sequence[float]],
+) -> tuple[float, float, float, float]:
     """Derive normalized cx, cy, w, h from any list of [x, y] points."""
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
@@ -32,17 +38,19 @@ class YOLODetExporter:
     ) -> Path:
         splits = splits or {"train": 0.7, "val": 0.2, "test": 0.1}
 
-        images = session.exec(
-            select(Image).where(
-                Image.project_id == project.id,
-                Image.status == ImageStatus.annotated,
-            )
-        ).all()
+        images = list(
+            session.exec(
+                select(Image).where(
+                    Image.project_id == project.id,
+                    Image.status == ImageStatus.annotated,
+                )
+            ).all()
+        )
 
-        classes: list[LabelClass] = session.exec(
+        classes: Sequence[LabelClass] = session.exec(
             select(LabelClass)
             .where(LabelClass.project_id == project.id)
-            .order_by(LabelClass.yolo_index)
+            .order_by(col(LabelClass.yolo_index))
         ).all()
 
         if not images:
@@ -68,7 +76,7 @@ class YOLODetExporter:
                 if src.exists():
                     shutil.copy2(src, img_dir / Path(img.filename).name)
 
-                annotations: list[Annotation] = session.exec(
+                annotations: Sequence[Annotation] = session.exec(
                     select(Annotation).where(Annotation.image_id == img.id)
                 ).all()
 
@@ -79,12 +87,14 @@ class YOLODetExporter:
                         continue
                     points = json.loads(ann.data)
                     cx, cy, w, h = _bbox_cxcywh(points)
-                    label_lines.append(f"{cls.yolo_index} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}")
+                    label_lines.append(
+                        f"{cls.yolo_index} {cx:.6f} {cy:.6f} {w:.6f} {h:.6f}"
+                    )
 
                 stem = Path(img.filename).stem
                 (lbl_dir / f"{stem}.txt").write_text("\n".join(label_lines))
 
-        yaml_data: dict = {
+        yaml_data: dict[str, object] = {
             "path": str(export_root),
             "nc": len(classes),
             "names": [cls.name for cls in classes],
@@ -105,9 +115,9 @@ class YOLODetExporter:
         return zip_path
 
 
-def _make_splits(images: list, ratios: dict[str, float]) -> dict[str, list]:
+def _make_splits(images: list[_T], ratios: dict[str, float]) -> dict[str, list[_T]]:
     total = len(images)
-    result: dict[str, list] = {}
+    result: dict[str, list[_T]] = {}
     cursor = 0
     keys = list(ratios.keys())
     for i, key in enumerate(keys):

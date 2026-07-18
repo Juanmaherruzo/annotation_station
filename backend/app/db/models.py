@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional
+
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -19,6 +20,7 @@ class ImageStatus(str, Enum):
 # Project
 # ---------------------------------------------------------------------------
 
+
 class Project(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
@@ -32,6 +34,7 @@ class Project(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 # LabelClass
 # ---------------------------------------------------------------------------
+
 
 class LabelClass(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -47,6 +50,7 @@ class LabelClass(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 # Image
 # ---------------------------------------------------------------------------
+
 
 class Image(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -64,6 +68,7 @@ class Image(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 # Annotation
 # ---------------------------------------------------------------------------
+
 
 class Annotation(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

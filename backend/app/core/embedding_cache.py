@@ -31,13 +31,13 @@ class EmbeddingCache:
         self,
         image_id: int,
         features: dict[str, Any],  # predictor._features
-        orig_hw: list,              # predictor._orig_hw
+        orig_hw: list[int],  # predictor._orig_hw
         project_dir: Path | None = None,
     ) -> None:
         path = self._path(image_id, project_dir)
 
         # Move tensors to CPU and cast to fp16 to halve disk size
-        def _to_cpu_fp16(obj):
+        def _to_cpu_fp16(obj: Any) -> Any:
             if isinstance(obj, torch.Tensor):
                 return obj.detach().cpu().to(torch.float16)
             if isinstance(obj, list):
@@ -50,9 +50,7 @@ class EmbeddingCache:
             "model": SAM_CHECKPOINT,  # invalidate cache on model change
         }
         torch.save(payload, path)
-        logger.debug(
-            "Embedding saved: %s (%.1f MB)", path, path.stat().st_size / 1e6
-        )
+        logger.debug("Embedding saved: %s (%.1f MB)", path, path.stat().st_size / 1e6)
 
     def load(
         self,
@@ -68,18 +66,23 @@ class EmbeddingCache:
         if not path.exists():
             return None
 
-        payload = torch.load(path, map_location="cpu", weights_only=False)
+        payload: dict[str, Any] = torch.load(
+            path, map_location="cpu", weights_only=False
+        )
 
         # Discard cache if it was built with a different model checkpoint
         if payload.get("model") != SAM_CHECKPOINT:
             logger.warning(
-                "Embedding cache for image_id=%s built with '%s', current model is '%s' — discarding.",
-                image_id, payload.get("model"), SAM_CHECKPOINT,
+                "Embedding cache for image_id=%s built with '%s', "
+                "current model is '%s' — discarding.",
+                image_id,
+                payload.get("model"),
+                SAM_CHECKPOINT,
             )
             path.unlink(missing_ok=True)
             return None
 
-        def _to_device_fp32(obj):
+        def _to_device_fp32(obj: Any) -> Any:
             if isinstance(obj, torch.Tensor):
                 return obj.to(device=device, dtype=torch.float32)
             if isinstance(obj, list):

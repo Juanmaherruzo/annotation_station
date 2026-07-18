@@ -1,10 +1,19 @@
 import io
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from PIL import Image as PILImage
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.config import settings
 from app.db.models import Annotation, Image, ImageStatus, Project
@@ -49,12 +58,12 @@ def _safe_filename(name: str, dest_dir: Path) -> str:
 
 
 @router.get("/", response_model=list[ImageRead])
-def list_images(project_id: int, session: SessionDep):
+def list_images(project_id: int, session: SessionDep) -> Sequence[Image]:
     _get_project_or_404(project_id, session)
     return session.exec(
         select(Image)
         .where(Image.project_id == project_id)
-        .order_by(Image.created_at)
+        .order_by(col(Image.created_at))
     ).all()
 
 
@@ -63,7 +72,7 @@ async def upload_images(
     project_id: int,
     session: SessionDep,
     files: list[UploadFile] = File(...),
-):
+) -> list[Image]:
     _get_project_or_404(project_id, session)
     base = _project_dir(project_id)
     images_dir = base / "images"
@@ -73,6 +82,8 @@ async def upload_images(
 
     created: list[Image] = []
     for upload in files:
+        if upload.filename is None:
+            continue  # multipart part without a filename
         suffix = Path(upload.filename).suffix.lower()
         if suffix not in ALLOWED_SUFFIXES:
             continue  # silently skip unsupported formats
@@ -88,7 +99,7 @@ async def upload_images(
 
         # Save thumbnail
         thumb = pil_img.copy()
-        thumb.thumbnail(settings.THUMBNAIL_SIZE, PILImage.LANCZOS)
+        thumb.thumbnail(settings.THUMBNAIL_SIZE, PILImage.Resampling.LANCZOS)
         thumb.save(thumbs_dir / filename, "JPEG", quality=80)
 
         db_image = Image(
@@ -109,7 +120,7 @@ async def upload_images(
 
 
 @router.get("/{image_id}/thumbnail")
-def get_thumbnail(project_id: int, image_id: int, session: SessionDep):
+def get_thumbnail(project_id: int, image_id: int, session: SessionDep) -> Response:
     img = _get_image_or_404(image_id, project_id, session)
     path = _project_dir(project_id) / "thumbnails" / img.filename
     if not path.exists():
@@ -118,7 +129,7 @@ def get_thumbnail(project_id: int, image_id: int, session: SessionDep):
 
 
 @router.get("/{image_id}/file")
-def get_image_file(project_id: int, image_id: int, session: SessionDep):
+def get_image_file(project_id: int, image_id: int, session: SessionDep) -> Response:
     img = _get_image_or_404(image_id, project_id, session)
     path = _project_dir(project_id) / "images" / img.filename
     if not path.exists():
@@ -131,7 +142,7 @@ def get_image_file(project_id: int, image_id: int, session: SessionDep):
 @router.patch("/{image_id}/status", response_model=ImageRead)
 def update_image_status(
     project_id: int, image_id: int, payload: ImageStatusUpdate, session: SessionDep
-):
+) -> Image:
     img = _get_image_or_404(image_id, project_id, session)
     img.status = payload.status
     session.add(img)
@@ -141,7 +152,7 @@ def update_image_status(
 
 
 @router.delete("/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_image(project_id: int, image_id: int, session: SessionDep):
+def delete_image(project_id: int, image_id: int, session: SessionDep) -> None:
     img = _get_image_or_404(image_id, project_id, session)
 
     # Delete associated annotations

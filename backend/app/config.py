@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -6,7 +7,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # SAM model locked to tiny — not a pydantic field, cannot be overridden by .env
 SAM_CHECKPOINT = "sam2.1_hiera_tiny.pt"
-SAM_CONFIG     = "configs/sam2.1/sam2.1_hiera_t.yaml"
+SAM_CONFIG = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
 
 class Settings(BaseSettings):
@@ -16,11 +17,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Storage paths
+    # Storage paths (override via .env). MODELS_DIR must contain the SAM checkpoint.
     DATA_DIR: Path = _PROJECT_ROOT / "data" / "projects"
-    MODELS_DIR: Path = Path(
-        r"C:\Users\juanm\Documents\Proyectos_personales\Python\DATA_LEARNING\Modelos"
-    )
+    MODELS_DIR: Path = _PROJECT_ROOT / "models"
 
     # Empty string triggers auto-detection: f"cuda:{device_count()-1}" at engine init
     CUDA_DEVICE: str = ""
@@ -42,7 +41,7 @@ class Settings(BaseSettings):
 
     @field_validator("DATA_DIR", "MODELS_DIR", mode="before")
     @classmethod
-    def _coerce_path(cls, v: object) -> Path:
+    def _coerce_path(cls, v: str | Path) -> Path:
         return Path(v)
 
 

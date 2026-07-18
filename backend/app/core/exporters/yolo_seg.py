@@ -2,10 +2,11 @@ import json
 import random
 import shutil
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.db.models import Annotation, Image, ImageStatus, LabelClass, Project
 
@@ -24,17 +25,19 @@ class YOLOSegExporter:
         splits = splits or {"train": 0.7, "val": 0.2, "test": 0.1}
 
         # Fetch annotated images and their label classes
-        images = session.exec(
-            select(Image).where(
-                Image.project_id == project.id,
-                Image.status == ImageStatus.annotated,
-            )
-        ).all()
+        images = list(
+            session.exec(
+                select(Image).where(
+                    Image.project_id == project.id,
+                    Image.status == ImageStatus.annotated,
+                )
+            ).all()
+        )
 
-        classes: list[LabelClass] = session.exec(
+        classes: Sequence[LabelClass] = session.exec(
             select(LabelClass)
             .where(LabelClass.project_id == project.id)
-            .order_by(LabelClass.yolo_index)
+            .order_by(col(LabelClass.yolo_index))
         ).all()
 
         if not images:
@@ -64,7 +67,7 @@ class YOLOSegExporter:
                     shutil.copy2(src, img_dir / Path(img.filename).name)
 
                 # Build label file
-                annotations: list[Annotation] = session.exec(
+                annotations: Sequence[Annotation] = session.exec(
                     select(Annotation).where(Annotation.image_id == img.id)
                 ).all()
 

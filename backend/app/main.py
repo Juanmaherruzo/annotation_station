@@ -1,4 +1,5 @@
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,12 +17,14 @@ sam_engine = SAM2Backend()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
     logger.info("Database initialised.")
     logger.info("Loading SAM 2.1 tiny...")
     sam_engine.load_model()
-    app.state.sam_engine = sam_engine  # accessible from request handlers via request.app.state
+    app.state.sam_engine = (
+        sam_engine  # accessible from request handlers via request.app.state
+    )
     yield
     logger.info("Shutting down — releasing VRAM.")
     sam_engine.unload_model()

@@ -2,9 +2,11 @@ import json
 import random
 import shutil
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TypeVar
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.db.models import Annotation, Image, ImageStatus, LabelClass, Project
 
@@ -22,17 +24,19 @@ class COCOExporter:
     ) -> Path:
         splits = splits or {"train": 0.7, "val": 0.2, "test": 0.1}
 
-        images = session.exec(
-            select(Image).where(
-                Image.project_id == project.id,
-                Image.status == ImageStatus.annotated,
-            )
-        ).all()
+        images = list(
+            session.exec(
+                select(Image).where(
+                    Image.project_id == project.id,
+                    Image.status == ImageStatus.annotated,
+                )
+            ).all()
+        )
 
-        classes: list[LabelClass] = session.exec(
+        classes: Sequence[LabelClass] = session.exec(
             select(LabelClass)
             .where(LabelClass.project_id == project.id)
-            .order_by(LabelClass.yolo_index)
+            .order_by(col(LabelClass.yolo_index))
         ).all()
 
         if not images:
@@ -62,18 +66,20 @@ class COCOExporter:
             ann_id = 1
 
             for img in split_imgs:
-                coco_images.append({
-                    "id": img.id,
-                    "file_name": Path(img.filename).name,
-                    "width": img.width,
-                    "height": img.height,
-                })
+                coco_images.append(
+                    {
+                        "id": img.id,
+                        "file_name": Path(img.filename).name,
+                        "width": img.width,
+                        "height": img.height,
+                    }
+                )
 
                 src = (project_dir or Path()) / "images" / Path(img.filename).name
                 if src.exists():
                     shutil.copy2(src, img_dir / Path(img.filename).name)
 
-                annotations: list[Annotation] = session.exec(
+                annotations: Sequence[Annotation] = session.exec(
                     select(Annotation).where(Annotation.image_id == img.id)
                 ).all()
 
@@ -100,15 +106,22 @@ class COCOExporter:
 
                     segmentation = [coord for pt in px_pts for coord in pt]
 
-                    coco_annotations.append({
-                        "id": ann_id,
-                        "image_id": img.id,
-                        "category_id": cls.yolo_index,
-                        "segmentation": [segmentation],
-                        "bbox": [round(x1, 2), round(y1, 2), round(bbox_w, 2), round(bbox_h, 2)],
-                        "area": round(area, 2),
-                        "iscrowd": 0,
-                    })
+                    coco_annotations.append(
+                        {
+                            "id": ann_id,
+                            "image_id": img.id,
+                            "category_id": cls.yolo_index,
+                            "segmentation": [segmentation],
+                            "bbox": [
+                                round(x1, 2),
+                                round(y1, 2),
+                                round(bbox_w, 2),
+                                round(bbox_h, 2),
+                            ],
+                            "area": round(area, 2),
+                            "iscrowd": 0,
+                        }
+                    )
                     ann_id += 1
 
             coco_data = {
@@ -131,7 +144,10 @@ class COCOExporter:
         return zip_path
 
 
-def _polygon_area(pts: list) -> float:
+_T = TypeVar("_T")
+
+
+def _polygon_area(pts: Sequence[Sequence[float]]) -> float:
     """Shoelace formula for polygon area in pixel² ."""
     n = len(pts)
     area = 0.0
@@ -142,9 +158,9 @@ def _polygon_area(pts: list) -> float:
     return abs(area) / 2
 
 
-def _make_splits(images: list, ratios: dict[str, float]) -> dict[str, list]:
+def _make_splits(images: list[_T], ratios: dict[str, float]) -> dict[str, list[_T]]:
     total = len(images)
-    result: dict[str, list] = {}
+    result: dict[str, list[_T]] = {}
     cursor = 0
     keys = list(ratios.keys())
     for i, key in enumerate(keys):

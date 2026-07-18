@@ -32,7 +32,7 @@ def mask_to_polygon(
     if poly.is_empty:
         return []
 
-    # make_valid may return MultiPolygon when the contour self-intersects; keep largest part
+    # make_valid may return MultiPolygon on self-intersection; keep the largest part
     if poly.geom_type != "Polygon":
         parts = list(poly.geoms) if hasattr(poly, "geoms") else []
         if not parts:

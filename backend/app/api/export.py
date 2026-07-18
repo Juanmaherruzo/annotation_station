@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -18,7 +18,21 @@ router = APIRouter(prefix="/projects/{project_id}/export", tags=["export"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
-_EXPORTERS = {
+
+class Exporter(Protocol):
+    """Structural interface shared by every dataset exporter."""
+
+    def export(
+        self,
+        project: Project,
+        session: Session,
+        output_dir: Path,
+        splits: dict[str, float] | None = None,
+        project_dir: Path | None = None,
+    ) -> Path: ...
+
+
+_EXPORTERS: dict[str, type[Exporter]] = {
     "yolo_seg": YOLOSegExporter,
     "yolo_det": YOLODetExporter,
     "coco": COCOExporter,
@@ -31,15 +45,18 @@ class ExportRequest(BaseModel):
 
 
 @router.post("/")
-def export_project(project_id: int, payload: ExportRequest, session: SessionDep) -> FileResponse:
+def export_project(
+    project_id: int, payload: ExportRequest, session: SessionDep
+) -> FileResponse:
     project = session.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     if payload.format not in _EXPORTERS:
+        valid = list(_EXPORTERS)
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown format '{payload.format}'. Valid options: {list(_EXPORTERS)}",
+            detail=f"Unknown format '{payload.format}'. Valid options: {valid}",
         )
 
     project_dir = settings.DATA_DIR / str(project_id)

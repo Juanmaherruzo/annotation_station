@@ -31,7 +31,7 @@ class SAMEngine(ABC):
     def predict_from_points(
         self,
         points: list[tuple[float, float]],  # pixel coordinates [(x, y), ...]
-        labels: list[int],                   # 1 = positive, 0 = negative
+        labels: list[int],  # 1 = positive, 0 = negative
     ) -> tuple[object, float]:
         """
         Run mask prediction for the currently loaded image.

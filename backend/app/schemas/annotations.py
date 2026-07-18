@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+
 from pydantic import BaseModel, Field
 
 # Normalized [0,1] coordinate pair
@@ -32,6 +33,7 @@ class AnnotationUpdate(BaseModel):
 # SAM inference request / response
 # ---------------------------------------------------------------------------
 
+
 class InferencePoint(BaseModel):
     x: float  # pixel coordinate
     y: float
@@ -41,7 +43,9 @@ class InferencePoint(BaseModel):
 class InferenceRequest(BaseModel):
     image_id: int
     points: list[InferencePoint]
-    box: list[float] | None = None  # pixel [x1, y1, x2, y2] — optional SAM region constraint
+    box: list[float] | None = (
+        None  # pixel [x1, y1, x2, y2] — optional SAM region constraint
+    )
 
 
 class InferenceResponse(BaseModel):

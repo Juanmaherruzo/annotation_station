@@ -1,8 +1,9 @@
 import shutil
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.config import settings
 from app.db.models import Image, ImageStatus, Project
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
-def _project_dir(project_id: int):
+def _project_dir(project_id: int) -> Path:
     return settings.DATA_DIR / str(project_id)
 
 
@@ -36,19 +37,22 @@ def _enrich(project: Project, session: Session) -> ProjectRead:
 
 
 @router.get("/", response_model=list[ProjectRead])
-def list_projects(session: SessionDep):
-    projects = session.exec(select(Project).order_by(Project.created_at.desc())).all()
+def list_projects(session: SessionDep) -> list[ProjectRead]:
+    projects = session.exec(
+        select(Project).order_by(col(Project.created_at).desc())
+    ).all()
     return [_enrich(p, session) for p in projects]
 
 
 @router.post("/", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
-def create_project(payload: ProjectCreate, session: SessionDep):
+def create_project(payload: ProjectCreate, session: SessionDep) -> ProjectRead:
     project = Project(name=payload.name, task_type=payload.task_type)
     session.add(project)
     session.commit()
     session.refresh(project)
 
     # Create project directory layout
+    assert project.id is not None  # set by the DB on commit
     base = _project_dir(project.id)
     (base / "images").mkdir(parents=True, exist_ok=True)
     (base / "thumbnails").mkdir(parents=True, exist_ok=True)
@@ -58,12 +62,14 @@ def create_project(payload: ProjectCreate, session: SessionDep):
 
 
 @router.get("/{project_id}", response_model=ProjectRead)
-def get_project(project_id: int, session: SessionDep):
+def get_project(project_id: int, session: SessionDep) -> ProjectRead:
     return _enrich(_get_or_404(project_id, session), session)
 
 
 @router.patch("/{project_id}", response_model=ProjectRead)
-def update_project(project_id: int, payload: ProjectUpdate, session: SessionDep):
+def update_project(
+    project_id: int, payload: ProjectUpdate, session: SessionDep
+) -> ProjectRead:
     project = _get_or_404(project_id, session)
     if payload.name is not None:
         project.name = payload.name
@@ -74,7 +80,7 @@ def update_project(project_id: int, payload: ProjectUpdate, session: SessionDep)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: int, session: SessionDep):
+def delete_project(project_id: int, session: SessionDep) -> None:
     project = _get_or_404(project_id, session)
 
     # Remove all DB rows (annotations, images, classes) via cascaded deletes in memory

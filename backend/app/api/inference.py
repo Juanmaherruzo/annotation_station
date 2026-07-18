@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session
 
 from app.config import settings
-from app.core.mask_utils import bbox_to_normalized, mask_to_bbox, mask_to_polygon, polygon_to_normalized
+from app.core.mask_utils import (
+    bbox_to_normalized,
+    mask_to_bbox,
+    mask_to_polygon,
+    polygon_to_normalized,
+)
 from app.core.sam2_backend import SAM2Backend
 from app.db.models import Image
 from app.db.session import get_session
@@ -19,15 +24,16 @@ logger = logging.getLogger(__name__)
 
 
 def _get_engine(request: Request) -> SAM2Backend:
-    return request.app.state.sam_engine
+    engine: SAM2Backend = request.app.state.sam_engine
+    return engine
 
 
 @router.post("/precompute", status_code=202)
 def precompute_embedding(
-    payload: dict,
+    payload: dict[str, int],
     request: Request,
     session: SessionDep,
-):
+) -> dict[str, object]:
     """
     Precompute and cache the image embedding without running prediction.
     Call this as soon as the user selects an image so the first SAM click is instant.
@@ -99,7 +105,12 @@ def predict_from_points(
     box_pixels = None
     if payload.box and len(payload.box) == 4:
         x1, y1, x2, y2 = payload.box
-        box_pixels = [x1 * image.width, y1 * image.height, x2 * image.width, y2 * image.height]
+        box_pixels = [
+            x1 * image.width,
+            y1 * image.height,
+            x2 * image.width,
+            y2 * image.height,
+        ]
 
     try:
         mask, score = engine.predict_from_points(points, labels, box=box_pixels)
@@ -112,7 +123,9 @@ def predict_from_points(
     # mask → pixel polygon → normalized polygon
     pixel_polygon = mask_to_polygon(mask)
     if not pixel_polygon:
-        raise HTTPException(status_code=422, detail="Could not extract polygon from mask")
+        raise HTTPException(
+            status_code=422, detail="Could not extract polygon from mask"
+        )
 
     norm_polygon = polygon_to_normalized(pixel_polygon, image.width, image.height)
 
@@ -122,7 +135,10 @@ def predict_from_points(
 
     logger.info(
         "inference/point: image_id=%s  points=%d  score=%.3f  vertices=%d",
-        payload.image_id, len(points), score, len(norm_polygon),
+        payload.image_id,
+        len(points),
+        score,
+        len(norm_polygon),
     )
 
     return InferenceResponse(polygon=norm_polygon, bbox=norm_bbox, score=score)

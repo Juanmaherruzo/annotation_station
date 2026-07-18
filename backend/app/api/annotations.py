@@ -32,6 +32,7 @@ def _get_annotation_or_404(ann_id: int, image_id: int, session: Session) -> Anno
 
 
 def _deserialize(ann: Annotation) -> AnnotationRead:
+    assert ann.id is not None  # persisted annotations always carry a primary key
     raw = json.loads(ann.data)
     return AnnotationRead(
         id=ann.id,
@@ -55,7 +56,9 @@ def _sync_image_status(image: Image, session: Session) -> None:
 
 
 @router.get("/", response_model=list[AnnotationRead])
-def list_annotations(project_id: int, image_id: int, session: SessionDep):
+def list_annotations(
+    project_id: int, image_id: int, session: SessionDep
+) -> list[AnnotationRead]:
     _get_image_or_404(image_id, project_id, session)
     annotations = session.exec(
         select(Annotation).where(Annotation.image_id == image_id)
@@ -66,7 +69,7 @@ def list_annotations(project_id: int, image_id: int, session: SessionDep):
 @router.post("/", response_model=AnnotationRead, status_code=status.HTTP_201_CREATED)
 def create_annotation(
     project_id: int, image_id: int, payload: AnnotationCreate, session: SessionDep
-):
+) -> AnnotationRead:
     image = _get_image_or_404(image_id, project_id, session)
 
     # Verify class belongs to this project
@@ -93,7 +96,7 @@ def update_annotation(
     annotation_id: int,
     payload: AnnotationUpdate,
     session: SessionDep,
-):
+) -> AnnotationRead:
     _get_image_or_404(image_id, project_id, session)
     ann = _get_annotation_or_404(annotation_id, image_id, session)
 
@@ -102,7 +105,9 @@ def update_annotation(
     if payload.class_id is not None:
         cls = session.get(LabelClass, payload.class_id)
         if not cls or cls.project_id != project_id:
-            raise HTTPException(status_code=400, detail="Invalid class_id for this project")
+            raise HTTPException(
+                status_code=400, detail="Invalid class_id for this project"
+            )
         ann.class_id = payload.class_id
     ann.updated_at = datetime.utcnow()
 
@@ -115,7 +120,7 @@ def update_annotation(
 @router.delete("/{annotation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_annotation(
     project_id: int, image_id: int, annotation_id: int, session: SessionDep
-):
+) -> None:
     image = _get_image_or_404(image_id, project_id, session)
     ann = _get_annotation_or_404(annotation_id, image_id, session)
     session.delete(ann)

@@ -1,7 +1,8 @@
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.db.models import LabelClass, Project
 from app.db.session import get_session
@@ -27,18 +28,20 @@ def _get_class_or_404(class_id: int, project_id: int, session: Session) -> Label
 
 
 @router.get("/", response_model=list[ClassRead])
-def list_classes(project_id: int, session: SessionDep):
+def list_classes(project_id: int, session: SessionDep) -> Sequence[LabelClass]:
     _get_project_or_404(project_id, session)
     classes = session.exec(
         select(LabelClass)
         .where(LabelClass.project_id == project_id)
-        .order_by(LabelClass.yolo_index)
+        .order_by(col(LabelClass.yolo_index))
     ).all()
     return classes
 
 
 @router.post("/", response_model=ClassRead, status_code=status.HTTP_201_CREATED)
-def create_class(project_id: int, payload: ClassCreate, session: SessionDep):
+def create_class(
+    project_id: int, payload: ClassCreate, session: SessionDep
+) -> LabelClass:
     _get_project_or_404(project_id, session)
 
     # Auto-assign the next YOLO index
@@ -60,7 +63,9 @@ def create_class(project_id: int, payload: ClassCreate, session: SessionDep):
 
 
 @router.patch("/reorder", response_model=list[ClassRead])
-def reorder_classes(project_id: int, payload: ClassReorderRequest, session: SessionDep):
+def reorder_classes(
+    project_id: int, payload: ClassReorderRequest, session: SessionDep
+) -> Sequence[LabelClass]:
     """Assign new yolo_index values to all classes in a single atomic operation."""
     _get_project_or_404(project_id, session)
     for item in payload.order:
@@ -72,12 +77,14 @@ def reorder_classes(project_id: int, payload: ClassReorderRequest, session: Sess
     return session.exec(
         select(LabelClass)
         .where(LabelClass.project_id == project_id)
-        .order_by(LabelClass.yolo_index)
+        .order_by(col(LabelClass.yolo_index))
     ).all()
 
 
 @router.patch("/{class_id}", response_model=ClassRead)
-def update_class(project_id: int, class_id: int, payload: ClassUpdate, session: SessionDep):
+def update_class(
+    project_id: int, class_id: int, payload: ClassUpdate, session: SessionDep
+) -> LabelClass:
     cls = _get_class_or_404(class_id, project_id, session)
     if payload.name is not None:
         cls.name = payload.name
@@ -92,7 +99,7 @@ def update_class(project_id: int, class_id: int, payload: ClassUpdate, session: 
 
 
 @router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_class(project_id: int, class_id: int, session: SessionDep):
+def delete_class(project_id: int, class_id: int, session: SessionDep) -> None:
     cls = _get_class_or_404(class_id, project_id, session)
 
     # Delete all annotations that reference this class
@@ -105,7 +112,7 @@ def delete_class(project_id: int, class_id: int, session: SessionDep):
     remaining = session.exec(
         select(LabelClass)
         .where(LabelClass.project_id == project_id)
-        .order_by(LabelClass.yolo_index)
+        .order_by(col(LabelClass.yolo_index))
     ).all()
     for i, c in enumerate(remaining):
         c.yolo_index = i
