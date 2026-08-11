@@ -1,198 +1,171 @@
-# SAMark — Guía de instalación
+# annotation-station — Installation guide
 
-Aplicación local de anotación de datasets con SAM 2.1 como motor de segmentación asistida.
+A local annotation platform for image datasets, using SAM 2.1 as the
+assisted-segmentation engine. Everything runs on your machine; no image ever
+leaves it.
 
 ---
 
-## Requisitos del sistema
+## System requirements
 
-| Componente | Mínimo | Notas |
+| Component | Minimum | Notes |
 |---|---|---|
-| OS | Windows 10/11 | El `start.bat` es Windows |
-| GPU | NVIDIA con 4 GB VRAM | RTX 3050 Laptop o superior |
-| Driver NVIDIA | >= 520 | [descargar](https://www.nvidia.com/drivers) |
-| CUDA | 12.x | Solo el driver; PyTorch trae sus propias DLLs |
-| Anaconda / Miniconda | cualquier versión reciente | [descargar](https://www.anaconda.com/download) |
-| Node.js | >= 18 | Instalado vía conda (ver paso 3) |
+| OS | Windows 10/11, Linux or macOS | `start.bat` is Windows-only; on Linux/macOS start the two servers by hand (step 7) |
+| GPU | NVIDIA with 4 GB VRAM | Optional but strongly recommended. Without CUDA, SAM runs on CPU and each click takes seconds instead of milliseconds |
+| NVIDIA driver | >= 520 | [download](https://www.nvidia.com/drivers) |
+| CUDA | 12.x | Driver only — PyTorch ships its own runtime libraries |
+| Python | 3.11 or newer | |
+| Node.js | >= 18 | Frontend build tooling |
 
 ---
 
-## Instalación paso a paso
+## 1. Clone
 
-### 1. Clonar o copiar el proyecto
-
-```
-git clone <url-del-repo>
-cd auto_Roboflow
+```bash
+git clone https://github.com/Juanmaherruzo/annotation_station.git
+cd annotation_station
 ```
 
----
+## 2. Create the Python environment
 
-### 2. Crear el entorno conda del backend
-
-```bat
-conda create -n sam_studio python=3.11 -y
-conda activate sam_studio
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# Linux / macOS
+source .venv/bin/activate
 ```
 
----
+## 3. Install PyTorch with CUDA
 
-### 3. Instalar Node.js en un entorno conda separado
+Check your driver's CUDA version with `nvidia-smi`, then install the matching
+build. PyTorch is not installed by the package metadata because the correct
+wheel depends on your hardware.
 
-Node.js **no debe** instalarse en `sam_studio` para evitar conflictos.
-Si ya tienes un entorno con Node.js (por ejemplo `detector_copas`) omite este paso.
-
-```bat
-conda create -n detector_copas -y
-conda activate detector_copas
-conda install -c conda-forge nodejs -y
+```bash
+# CUDA 12.8
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# CUDA 12.4
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# CPU only
+pip install torch torchvision
 ```
 
-Verifica:
-```bat
-node --version    # >= 18.x
-npm --version
+Verify:
+
+```bash
+python -c "import torch; print(torch.cuda.is_available())"
 ```
 
----
+## 4. Install SAM 2.1
 
-### 4. Instalar SAM 2.1
+`sam2` is not published on PyPI, so it is installed from source:
 
-```bat
-conda activate sam_studio
+```bash
 pip install git+https://github.com/facebookresearch/sam2.git
-```
-
-Verifica que se instaló correctamente:
-```bat
 python -c "import sam2; print('sam2 OK')"
 ```
 
----
+## 5. Install the backend
 
-### 5. Instalar PyTorch con CUDA
-
-> Requiere CUDA 12.x en el driver (comprueba con `nvidia-smi`).
-
-```bat
-conda activate sam_studio
-pip install torch==2.11.0+cu128 torchvision==0.26.0+cu128 --index-url https://download.pytorch.org/whl/cu128
-```
-
-Si tu driver tiene CUDA 12.4 o inferior usa `cu124`:
-```bat
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-```
-
-Verifica GPU:
-```bat
-python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
-```
-
----
-
-### 6. Instalar el resto de dependencias del backend
-
-```bat
-conda activate sam_studio
+```bash
 cd backend
 pip install -e ".[dev]"
 cd ..
 ```
 
----
+## 6. Install the frontend
 
-### 7. Instalar dependencias del frontend
-
-```bat
-conda activate detector_copas
+```bash
 cd frontend
 npm install
 cd ..
 ```
 
----
+## 7. Download a SAM 2.1 checkpoint
 
-### 8. Descargar el checkpoint de SAM 2.1
+Download **one** checkpoint from the
+[SAM 2.1 model list](https://github.com/facebookresearch/sam2?tab=readme-ov-file#model-description)
+and place it in the `models/` directory at the repository root:
 
-Descarga **uno** de los siguientes checkpoints y colócalo en la carpeta de modelos:
-
-| Modelo | VRAM | Velocidad | Calidad |
+| Variant | Checkpoint file | VRAM | Notes |
 |---|---|---|---|
-| `sam2.1_hiera_tiny.pt` | ~1.5 GB | Muy rápido | Buena |
-| `sam2.1_hiera_base_plus.pt` | ~2.5 GB | Rápido | Mejor (**recomendado**) |
-| `sam2.1_hiera_large.pt` | ~4 GB | Lento en 4 GB | Máxima |
+| `tiny` | `sam2.1_hiera_tiny.pt` | ~1.5 GB | Default. Fast, good quality |
+| `small` | `sam2.1_hiera_small.pt` | ~2 GB | |
+| `base_plus` | `sam2.1_hiera_base_plus.pt` | ~2.5 GB | Better masks, recommended if you have the VRAM |
+| `large` | `sam2.1_hiera_large.pt` | ~4 GB | Best quality, slow on a 4 GB card |
 
-Descarga desde: https://github.com/facebookresearch/sam2?tab=readme-ov-file#model-description
-
-Coloca el `.pt` en:
 ```
-C:\Users\<tu_usuario>\Documents\Proyectos_personales\Python\DATA_LEARNING\Modelos\
+annotation_station/
+└── models/
+    └── sam2.1_hiera_tiny.pt
 ```
-o edita `MODELS_DIR` en `backend/app/config.py`.
 
----
+## 8. Configure the backend
 
-### 9. Configurar el backend
+Copy the example environment file and edit it:
 
-Edita `backend/.env` para apuntar al checkpoint que hayas descargado:
+```bash
+cp backend/.env.example backend/.env
+```
+
+The only value most people need to change is the model size, which must match
+the checkpoint you downloaded in step 7:
 
 ```env
-# Para base_plus (recomendado con RTX 3050):
-SAM_CHECKPOINT=sam2.1_hiera_base_plus.pt
-SAM_CONFIG=configs/sam2.1/sam2.1_hiera_b+.yaml
-
-# Para tiny (menos VRAM, más rápido):
-# SAM_CHECKPOINT=sam2.1_hiera_tiny.pt
-# SAM_CONFIG=configs/sam2.1/sam2.1_hiera_t.yaml
-
-POLYGON_TOLERANCE=4.0
+SAM_VARIANT=tiny        # tiny | small | base_plus | large
 ```
+
+`SAM_VARIANT` selects the checkpoint **and** its Hydra config together, so the
+two cannot fall out of step. If the matching `.pt` file is not in `models/`, the
+server refuses to start and names the file it expected — it will not quietly
+fall back to a different model.
+
+## 9. Start
+
+**Windows.** Double-click `start.bat`, or run it from a terminal. It opens two
+console windows (backend and frontend) and your browser at
+`http://localhost:5173`. If your virtual environment is not at `.venv`, edit the
+two paths at the top of the script.
+
+**Linux / macOS**, or to run the servers manually:
+
+```bash
+# terminal 1
+cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# terminal 2
+cd frontend && npm run dev
+```
+
+The backend takes 10–30 seconds on first start while SAM loads.
 
 ---
 
-### 10. Adaptar el start.bat a tu máquina
+## Troubleshooting
 
-Abre `start.bat` y comprueba que estas dos rutas son correctas:
-
-```bat
-set UVICORN=C:\Users\<tu_usuario>\anaconda3\envs\sam_studio\Scripts\uvicorn.exe
-set NPM=C:\Users\<tu_usuario>\anaconda3\envs\detector_copas\npm.cmd
-```
-
-Si Anaconda está en otra ubicación (p.ej. `C:\ProgramData\anaconda3`) cámbiala aquí.
-
----
-
-## Arranque
-
-Doble clic en `start.bat`. Se abren dos ventanas de terminal y el navegador en `http://localhost:5173`.
-
-- **Ventana Backend**: arranca FastAPI + carga SAM (~10-30 s la primera vez).
-- **Ventana Frontend**: arranca Vite dev server.
-
----
-
-## Estructura de entornos conda
-
-```
-anaconda3/
-├── envs/
-│   ├── sam_studio/        ← backend Python (FastAPI, SAM, PyTorch CUDA)
-│   └── detector_copas/    ← Node.js para el frontend (npm/vite)
-```
-
-SAMark **no modifica** ningún otro entorno conda de tu máquina.
-
----
-
-## Resolución de problemas
-
-| Síntoma | Causa probable | Solución |
+| Symptom | Likely cause | Fix |
 |---|---|---|
-| `"uvicorn" no se reconoce` | Ruta incorrecta en start.bat | Comprueba `UVICORN=` en start.bat |
-| `"node" no se reconoce` | Ruta incorrecta en start.bat | Comprueba `NPM=` y el `set PATH=` en start.bat |
-| `CUDA not available` | PyTorch CPU instalado | Repite el paso 5 con `--force-reinstall` |
-| OOM en primera inferencia | Modelo demasiado grande | Cambia a `tiny` en `backend/.env` |
-| Frontend se queda en blanco | Backend no arrancó aún | Espera 30 s y recarga; revisa la ventana Backend |
-| Puerto 8000 ocupado | Otra instancia corriendo | Cierra la ventana Backend anterior |
+| `SAM checkpoint not found` at startup | `SAM_VARIANT` does not match the file in `models/` | The error names the expected filename — download it or change `SAM_VARIANT` |
+| `SAM_VARIANT=... is not recognised` | Typo in `backend/.env` | Use one of `tiny`, `small`, `base_plus`, `large` |
+| `torch.cuda.is_available()` is `False` | CPU-only PyTorch installed | Redo step 3 with the right index URL and `--force-reinstall` |
+| HTTP 507 on first click | Out of GPU memory | Switch to a smaller `SAM_VARIANT`, or close other GPU applications |
+| Frontend loads but every request fails | Backend not up yet | Wait for the backend window to print that SAM is ready, then reload |
+| Port 8000 already in use | A previous instance is still running | Close it, or set `PORT` in `backend/.env` |
+| Masks look coarse | Polygon simplification too aggressive | Lower `POLYGON_TOLERANCE` in `backend/.env` |
+
+---
+
+## What gets stored, and where
+
+Everything stays inside the repository directory:
+
+```
+data/projects/<project_id>/
+├── images/       # your uploaded images
+├── thumbnails/   # generated previews
+└── _embeddings/  # cached SAM feature tensors (safe to delete; they are recomputed)
+```
+
+`data/` and `models/` are excluded from version control. No telemetry is
+collected and the application makes no outbound network requests.

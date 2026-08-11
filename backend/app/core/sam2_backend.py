@@ -1,4 +1,5 @@
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -6,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 
-from app.config import SAM_CONFIG, settings
+from app.config import settings
 from app.core.embedding_cache import EmbeddingCache
 from app.core.sam_engine import SAMEngine
 
@@ -25,12 +26,21 @@ def _resolve_device() -> str:
 
 class SAM2Backend(SAMEngine):
     """
-    SAM 2.1 tiny backend.
+    SAM 2.1 backend (variant selected by ``settings.SAM_VARIANT``).
 
     Embedding cache strategy (three levels, cheapest first):
       1. In-memory:  same image_id as last set_image() call → skip entirely.
       2. Disk cache: .pt file with full feature tensors → restore in ~50 ms.
       3. Fresh:      run forward pass through the image encoder (~1-2 s on RTX 3050).
+
+    Concurrency. A single instance is shared by the whole application and holds
+    the selected image in mutable state (``_current_image_id`` and the
+    predictor's feature tensors). FastAPI runs sync endpoints in a threadpool,
+    so without a lock two overlapping requests interleave set_image() and
+    predict(), and a click on one image can be answered with a mask computed
+    from another. Every public entry point takes ``_lock``; callers that need
+    select-then-predict as one atomic step must use :meth:`predict_on_image`
+    instead of calling the two in sequence.
     """
 
     def __init__(self) -> None:
@@ -39,6 +49,9 @@ class SAM2Backend(SAMEngine):
         self._predictor: Any = None
         self._current_image_id: int | None = None
         self._cache = EmbeddingCache()
+        # Re-entrant: predict_on_image() holds the lock and then calls
+        # set_image() and predict_from_points(), which acquire it again.
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -49,10 +62,21 @@ class SAM2Backend(SAMEngine):
         from sam2.sam2_image_predictor import SAM2ImagePredictor
 
         ckpt = str(settings.sam_checkpoint_path)
-        logger.info("Loading SAM 2.1 tiny on %s  ckpt=%s", self._device, ckpt)
+        logger.info(
+            "Loading SAM 2.1 (%s) on %s  ckpt=%s",
+            settings.SAM_VARIANT,
+            self._device,
+            ckpt,
+        )
+        if not settings.sam_checkpoint_path.exists():
+            raise FileNotFoundError(
+                f"SAM checkpoint not found: {ckpt}\n"
+                f"SAM_VARIANT is '{settings.SAM_VARIANT}', which needs "
+                f"'{settings.sam_checkpoint_name}' in {settings.MODELS_DIR}."
+            )
 
         with torch.inference_mode():
-            model = build_sam2(SAM_CONFIG, ckpt, device=self._device)
+            model = build_sam2(settings.sam_config, ckpt, device=self._device)
 
         # Keep model in fp32 — autocast handles mixed precision during forward pass.
         # model.half() causes dtype mismatch with SAM2's internal float32 preprocessing.
@@ -98,11 +122,39 @@ class SAM2Backend(SAMEngine):
     # Image setup
     # ------------------------------------------------------------------
 
+    def predict_on_image(
+        self,
+        image_path: Path,
+        image_id: int | None,
+        project_dir: Path | None,
+        points: list[tuple[float, float]],
+        labels: list[int],
+        box: list[float] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        """Select an image and predict from it as one atomic operation.
+
+        Prefer this over ``set_image()`` followed by ``predict_from_points()``:
+        those take the lock twice, and another request can select a different
+        image in between, so the returned mask would be from the wrong image.
+        """
+        with self._lock:
+            self.set_image(image_path, image_id=image_id, project_dir=project_dir)
+            return self.predict_from_points(points, labels, box=box)
+
     def set_image(
         self,
         image_path: Path,
         image_id: int | None = None,
         project_dir: Path | None = None,
+    ) -> None:
+        with self._lock:
+            self._set_image_locked(image_path, image_id, project_dir)
+
+    def _set_image_locked(
+        self,
+        image_path: Path,
+        image_id: int | None,
+        project_dir: Path | None,
     ) -> None:
         if self._predictor is None:
             raise RuntimeError("Call load_model() before set_image().")
@@ -174,6 +226,15 @@ class SAM2Backend(SAMEngine):
         points: list[tuple[float, float]],
         labels: list[int],
         box: list[float] | None = None,  # pixel [x1, y1, x2, y2]
+    ) -> tuple[np.ndarray, float]:
+        with self._lock:
+            return self._predict_from_points_locked(points, labels, box)
+
+    def _predict_from_points_locked(
+        self,
+        points: list[tuple[float, float]],
+        labels: list[int],
+        box: list[float] | None,
     ) -> tuple[np.ndarray, float]:
         if self._predictor is None:
             raise RuntimeError("Call load_model() first.")

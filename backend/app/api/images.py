@@ -1,4 +1,5 @@
 import io
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated
@@ -13,9 +14,11 @@ from fastapi import (
     status,
 )
 from PIL import Image as PILImage
+from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
 from app.config import settings
+from app.core.embedding_cache import EmbeddingCache
 from app.db.models import Annotation, Image, ImageStatus, Project
 from app.db.session import get_session
 from app.schemas.images import ImageRead, ImageStatusUpdate
@@ -24,7 +27,28 @@ router = APIRouter(prefix="/projects/{project_id}/images", tags=["images"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png"}
+# Uploads are read fully into memory to be decoded, so the cap is what keeps a
+# single request from exhausting RAM.
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+_embedding_cache = EmbeddingCache()
+
+
+class SkippedUpload(BaseModel):
+    """One file that was not stored, and why."""
+
+    name: str
+    reason: str
+
+
+class UploadResult(BaseModel):
+    """Outcome of an upload batch: what was stored and what was rejected."""
+
+    created: list[ImageRead]
+    skipped: list[SkippedUpload]
 
 
 def _project_dir(project_id: int) -> Path:
@@ -46,10 +70,19 @@ def _get_project_or_404(project_id: int, session: Session) -> Project:
 
 
 def _safe_filename(name: str, dest_dir: Path) -> str:
-    """Append numeric suffix if name already exists in dest_dir."""
-    stem = Path(name).stem
-    suffix = Path(name).suffix
-    candidate = name
+    """Strip any directory component, then de-duplicate against dest_dir.
+
+    ``Path(name).name`` is the important part: a multipart part named
+    ``../../../evil.png`` passes the extension allow-list, and without this the
+    file would be written outside the project directory.
+    """
+    basename = Path(name).name
+    stem = Path(basename).stem
+    suffix = Path(basename).suffix
+    if not stem:
+        raise ValueError(f"Unusable filename: {name!r}")
+
+    candidate = basename
     counter = 1
     while (dest_dir / candidate).exists():
         candidate = f"{stem}_{counter}{suffix}"
@@ -67,12 +100,18 @@ def list_images(project_id: int, session: SessionDep) -> Sequence[Image]:
     ).all()
 
 
-@router.post("/", response_model=list[ImageRead], status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_images(
     project_id: int,
     session: SessionDep,
     files: list[UploadFile] = File(...),
-) -> list[Image]:
+) -> UploadResult:
+    """Store uploaded images and report exactly what was accepted and skipped.
+
+    Every rejection is reported rather than silently dropped: a user uploading a
+    folder of 200 files with 12 TIFFs among them needs to know which 12 did not
+    make it. One bad file does not abort the batch.
+    """
     _get_project_or_404(project_id, session)
     base = _project_dir(project_id)
     images_dir = base / "images"
@@ -81,26 +120,52 @@ async def upload_images(
     thumbs_dir.mkdir(parents=True, exist_ok=True)
 
     created: list[Image] = []
+    skipped: list[SkippedUpload] = []
+
     for upload in files:
         if upload.filename is None:
-            continue  # multipart part without a filename
+            skipped.append(
+                SkippedUpload(name="<unnamed>", reason="part carried no filename")
+            )
+            continue
+
         suffix = Path(upload.filename).suffix.lower()
         if suffix not in ALLOWED_SUFFIXES:
-            continue  # silently skip unsupported formats
+            skipped.append(
+                SkippedUpload(
+                    name=upload.filename,
+                    reason=(
+                        f"unsupported format '{suffix or 'none'}'; "
+                        f"accepted: {', '.join(sorted(ALLOWED_SUFFIXES))}"
+                    ),
+                )
+            )
+            continue
 
-        data = await upload.read()
-        pil_img = PILImage.open(io.BytesIO(data)).convert("RGB")
-        width, height = pil_img.size
+        try:
+            data = await upload.read()
+            if len(data) > MAX_UPLOAD_BYTES:
+                raise ValueError(
+                    f"file is {len(data) / 1e6:.1f} MB, over the "
+                    f"{MAX_UPLOAD_BYTES / 1e6:.0f} MB limit"
+                )
+            with PILImage.open(io.BytesIO(data)) as opened:
+                opened.verify()  # cheap structural check before decoding
+            with PILImage.open(io.BytesIO(data)) as opened:
+                pil_img = opened.convert("RGB")
+            width, height = pil_img.size
 
-        filename = _safe_filename(upload.filename, images_dir)
+            filename = _safe_filename(upload.filename, images_dir)
+            pil_img.save(images_dir / filename)
 
-        # Save original
-        pil_img.save(images_dir / filename)
-
-        # Save thumbnail
-        thumb = pil_img.copy()
-        thumb.thumbnail(settings.THUMBNAIL_SIZE, PILImage.Resampling.LANCZOS)
-        thumb.save(thumbs_dir / filename, "JPEG", quality=80)
+            thumb = pil_img.copy()
+            thumb.thumbnail(settings.THUMBNAIL_SIZE, PILImage.Resampling.LANCZOS)
+            thumb.save(thumbs_dir / filename, "JPEG", quality=80)
+        except (OSError, ValueError, PILImage.DecompressionBombError) as exc:
+            # Keep going: a single corrupt file must not lose the whole batch.
+            logger.warning("Skipping upload %r: %s", upload.filename, exc)
+            skipped.append(SkippedUpload(name=upload.filename, reason=str(exc)))
+            continue
 
         db_image = Image(
             project_id=project_id,
@@ -116,7 +181,20 @@ async def upload_images(
     session.commit()
     for img in created:
         session.refresh(img)
-    return created
+
+    if skipped:
+        logger.info(
+            "Upload to project %d: %d created, %d skipped",
+            project_id,
+            len(created),
+            len(skipped),
+        )
+    return UploadResult(
+        created=[
+            ImageRead.model_validate(img, from_attributes=True) for img in created
+        ],
+        skipped=skipped,
+    )
 
 
 @router.get("/{image_id}/thumbnail")
@@ -172,7 +250,7 @@ def delete_image(project_id: int, image_id: int, session: SessionDep) -> None:
         if f.exists():
             f.unlink()
 
-    # Remove cached embedding if present
-    emb = base / "_embeddings" / f"{image_id}.npy"
-    if emb.exists():
-        emb.unlink()
+    # Remove the cached embedding through the cache itself. Hard-coding the path
+    # here previously looked for a ".npy" while the cache writes ".pt", so no
+    # embedding was ever deleted and they accumulated indefinitely.
+    _embedding_cache.delete(image_id, project_dir=base)

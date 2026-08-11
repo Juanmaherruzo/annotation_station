@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
-from app.config import _PROJECT_ROOT, SAM_CHECKPOINT, Settings, settings
+import pytest
+from pydantic import ValidationError
+
+from app.config import _PROJECT_ROOT, SAM_VARIANTS, Settings, settings
 
 
 def test_settings_paths_are_path_objects() -> None:
@@ -17,7 +20,34 @@ def test_models_dir_default_is_repo_relative() -> None:
 
 
 def test_sam_checkpoint_path_composes_models_dir_and_filename() -> None:
-    assert settings.sam_checkpoint_path == settings.MODELS_DIR / SAM_CHECKPOINT
+    assert settings.sam_checkpoint_path == (
+        settings.MODELS_DIR / settings.sam_checkpoint_name
+    )
+
+
+def test_sam_variant_is_configurable() -> None:
+    """The documented .env knob must actually change the model that loads.
+
+    Regression test: SAM_CHECKPOINT and SAM_CONFIG used to be module constants,
+    so INSTALL.md told users to select base_plus via .env while the app silently
+    kept loading tiny.
+    """
+    configured = Settings(SAM_VARIANT="base_plus")
+    assert configured.sam_checkpoint_name == "sam2.1_hiera_base_plus.pt"
+    assert configured.sam_config.endswith("sam2.1_hiera_b+.yaml")
+    assert configured.sam_checkpoint_path.name == "sam2.1_hiera_base_plus.pt"
+
+
+def test_every_variant_pairs_a_checkpoint_with_its_config() -> None:
+    for variant, (checkpoint, config) in SAM_VARIANTS.items():
+        assert checkpoint.endswith(".pt"), variant
+        assert config.endswith(".yaml"), variant
+
+
+def test_unknown_sam_variant_is_rejected() -> None:
+    """Falling back silently would run a different model than configured."""
+    with pytest.raises(ValidationError, match="not recognised"):
+        Settings(SAM_VARIANT="enormous")
 
 
 def test_polygon_tolerance_is_positive() -> None:

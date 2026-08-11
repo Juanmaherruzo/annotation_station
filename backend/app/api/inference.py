@@ -1,6 +1,7 @@
 import logging
 from typing import Annotated
 
+import torch
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session
 
@@ -52,10 +53,21 @@ def precompute_embedding(
     engine: SAM2Backend = _get_engine(request)
     try:
         engine.set_image(image_path, image_id=image.id, project_dir=project_dir)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Image file missing on disk")
-    except MemoryError:
-        raise HTTPException(status_code=507, detail="Insufficient VRAM")
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail="Image file missing on disk"
+        ) from exc
+    except torch.cuda.OutOfMemoryError as exc:
+        # OutOfMemoryError subclasses RuntimeError, not MemoryError, so an
+        # `except MemoryError` here would never fire and the client would see a
+        # bare 500 on the one failure this project is most likely to hit.
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Out of GPU memory while encoding this image. Close other GPU "
+                "applications or use a smaller image."
+            ),
+        ) from exc
 
     logger.info("inference/precompute: image_id=%s cached", image_id)
     return {"status": "ok", "image_id": image_id}
@@ -86,14 +98,6 @@ def predict_from_points(
 
     engine: SAM2Backend = _get_engine(request)
 
-    # Compute or restore image embedding
-    try:
-        engine.set_image(image_path, image_id=image.id, project_dir=project_dir)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Image file missing on disk")
-    except MemoryError:
-        raise HTTPException(status_code=507, detail="Insufficient VRAM for this image")
-
     # Build point arrays in pixel space
     points = [(pt.x, pt.y) for pt in payload.points]
     labels = [pt.label for pt in payload.points]
@@ -112,10 +116,33 @@ def predict_from_points(
             y2 * image.height,
         ]
 
+    # Select-and-predict in one locked operation. Doing it as two calls lets a
+    # concurrent request swap the engine's current image in between, and the
+    # mask would then be computed from a different image than `payload.image_id`
+    # while still being normalised by this image's width and height.
     try:
-        mask, score = engine.predict_from_points(points, labels, box=box_pixels)
+        mask, score = engine.predict_on_image(
+            image_path,
+            image_id=image.id,
+            project_dir=project_dir,
+            points=points,
+            labels=labels,
+            box=box_pixels,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail="Image file missing on disk"
+        ) from exc
+    except torch.cuda.OutOfMemoryError as exc:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Out of GPU memory for this image. Close other GPU applications "
+                "or use a smaller image."
+            ),
+        ) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     if not mask.any():
         raise HTTPException(status_code=422, detail="SAM returned an empty mask")

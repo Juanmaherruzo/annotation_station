@@ -10,7 +10,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.11%20CUDA-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![SAM](https://img.shields.io/badge/SAM-2.1%20tiny-0064FF?style=flat-square)](https://github.com/facebookresearch/sam2)
+[![SAM](https://img.shields.io/badge/SAM-2.1-0064FF?style=flat-square)](https://github.com/facebookresearch/sam2)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
 
@@ -35,6 +35,8 @@ Designed for computer vision practitioners who need to label custom datasets —
 ## Why annotation-station
 
 There are excellent annotation tools out there. annotation-station is not trying to replace all of them — it occupies a specific niche: **no cloud, fully local, zero telemetry**.
+
+The table below is a **feature comparison, not a benchmark**: it is drawn from each tool's own documentation, and no timing or accuracy measurements were run against them.
 
 | Aspect | annotation-station | Roboflow | CVAT | Label Studio |
 |---|---|---|---|---|

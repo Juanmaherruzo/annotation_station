@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getProjects, createProject, deleteProject } from "../api";
 
-// TODO (FASE 1, punto 2): wire up fully once backend CRUD is implemented
-
 export default function Projects() {
   const navigate = useNavigate();
   const qc = useQueryClient();

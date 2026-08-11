@@ -20,7 +20,7 @@ sam_engine = SAM2Backend()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
     logger.info("Database initialised.")
-    logger.info("Loading SAM 2.1 tiny...")
+    logger.info("Loading SAM 2.1 (%s)...", settings.SAM_VARIANT)
     sam_engine.load_model()
     app.state.sam_engine = (
         sam_engine  # accessible from request handlers via request.app.state
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     sam_engine.unload_model()
 
 
-app = FastAPI(title="SAMark API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="annotation-station API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

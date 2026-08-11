@@ -1,3 +1,4 @@
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Annotated, Protocol
@@ -6,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session
+from starlette.background import BackgroundTask
 
 from app.config import settings
 from app.core.exporters.coco import COCOExporter
@@ -71,10 +73,17 @@ def export_project(
             project_dir=project_dir,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
 
+    # The temp tree holds a full copy of the dataset. Delete it once the
+    # response has been streamed, otherwise every export leaks one to disk.
     return FileResponse(
         path=str(zip_path),
         media_type="application/zip",
         filename=zip_path.name,
+        background=BackgroundTask(shutil.rmtree, tmp_dir, ignore_errors=True),
     )
