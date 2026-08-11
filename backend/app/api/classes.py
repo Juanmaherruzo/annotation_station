@@ -30,12 +30,11 @@ def _get_class_or_404(class_id: int, project_id: int, session: Session) -> Label
 @router.get("/", response_model=list[ClassRead])
 def list_classes(project_id: int, session: SessionDep) -> Sequence[LabelClass]:
     _get_project_or_404(project_id, session)
-    classes = session.exec(
+    return session.exec(
         select(LabelClass)
         .where(LabelClass.project_id == project_id)
         .order_by(col(LabelClass.yolo_index))
     ).all()
-    return classes
 
 
 @router.post("/", response_model=ClassRead, status_code=status.HTTP_201_CREATED)

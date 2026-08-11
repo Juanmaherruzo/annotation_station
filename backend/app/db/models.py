@@ -1,6 +1,5 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -22,7 +21,7 @@ class ImageStatus(str, Enum):
 
 
 class Project(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     task_type: TaskType = Field(default=TaskType.instance_segmentation)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -37,13 +36,13 @@ class Project(SQLModel, table=True):
 
 
 class LabelClass(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id")
     name: str
     color: str = Field(default="#FF0000")  # hex color string
     yolo_index: int  # 0-based, auto-assigned on creation
 
-    project: Optional[Project] = Relationship(back_populates="classes")
+    project: Project | None = Relationship(back_populates="classes")
     annotations: list["Annotation"] = Relationship(back_populates="label_class")
 
 
@@ -53,7 +52,7 @@ class LabelClass(SQLModel, table=True):
 
 
 class Image(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id")
     filename: str  # original filename, stored under project dir
     width: int
@@ -61,7 +60,7 @@ class Image(SQLModel, table=True):
     status: ImageStatus = Field(default=ImageStatus.unannotated)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    project: Optional[Project] = Relationship(back_populates="images")
+    project: Project | None = Relationship(back_populates="images")
     annotations: list["Annotation"] = Relationship(back_populates="image")
 
 
@@ -71,7 +70,7 @@ class Image(SQLModel, table=True):
 
 
 class Annotation(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     image_id: int = Field(foreign_key="image.id")
     class_id: int = Field(foreign_key="labelclass.id")
     # Normalized polygon [[x,y], ...] for segmentation, or [x,y,w,h] for detection
@@ -79,5 +78,5 @@ class Annotation(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    image: Optional[Image] = Relationship(back_populates="annotations")
-    label_class: Optional[LabelClass] = Relationship(back_populates="annotations")
+    image: Image | None = Relationship(back_populates="annotations")
+    label_class: LabelClass | None = Relationship(back_populates="annotations")
